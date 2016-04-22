@@ -1,0 +1,82 @@
+#!/usr/bin/env python2
+# encoding: utf-8
+
+import csv
+import re
+from os import makedirs
+from errno import EEXIST
+from argparse import ArgumentParser
+from arkparser import ARKParser
+
+ARCHITECTURE_LOOKUP = {
+    '32-bit' : 'i386',
+    '64-bit' : 'x86_64',
+    'Itanium 64-bit' : 'ia64',
+}
+
+CPU_TEMPLATE = '''structure template hardware/cpu/intel/%(family)s_%(number)s;
+
+"manufacturer" = "Intel";
+"model" = "%(ident)s";
+"speed" = %(speed)s;
+"arch" = "%(arch)s";
+"cores" = %(Num_of_Cores)s;
+"chipset" = "%(codename)s"; # Intel codename
+"power" = %(power)s; # TDP in watts
+'''
+#"hyperthreading" = %(hyperthreading)s; # %(Num_of_Threads)s threads
+
+RE_DEBRACKET = re.compile(r'\((?!R).*\).*$')
+
+
+def main():
+    argparser = ArgumentParser(description='Generate Pan hardware templates for Intel CPUs from ARK')
+    argparser.add_argument('filename', metavar='FILENAME', help='Path to downloaded ARK XML file')
+    args = argparser.parse_args()
+
+    arkparser = ARKParser()
+    cpus = arkparser.parse(args.filename)
+
+    for cpu in cpus:
+        if 'Processor_Number' in cpu and cpu['Processor_Number']:
+            try:
+                cpu['arch'] = ARCHITECTURE_LOOKUP[cpu['Instruction_Set']]
+            except KeyError:
+                continue
+
+            cpu['hyperthreading'] = False
+
+            try:
+                cpu['hyperthreading'] = cpu['Intel(R)_HyperThreading_Technology']
+            except KeyError:
+                pass
+
+            cpu['speed'] = cpu['Processor_Base_Frequency'].replace(' ', '*')
+            cpu['ident'] = RE_DEBRACKET.sub('', cpu['Processor_Name'].replace('Processor', 'CPU'))
+            cpu['ident'] += ' @ %(Processor_Base_Frequency)s' % cpu
+            cpu['family'] = RE_DEBRACKET.sub('', cpu['ident'].split()[1]).replace('(R)', '').lower()
+            cpu['number'] = cpu['Processor_Number'].replace(' ','').replace('-','_').upper().replace('V','v')
+            cpu['codename'] = cpu['Code_Name'].lower()
+            cpu['power'] = cpu['TDP'].split()[0]
+
+            try:
+                makedirs('intel')
+            except OSError as e:
+                if e.errno == EEXIST:
+                    pass
+                else:
+                    raise
+
+            with open('intel/%(family)s_%(number)s.pan' % cpu, 'w') as f:
+                f.write(CPU_TEMPLATE % cpu)
+
+            for k, v in cpu.iteritems():
+                if v:
+                    print ("%60s : %s") % (k, v)
+            print
+        else:
+            print 'Skipped "%(Processor_Name)s" due to missing processor number' % cpu
+
+
+if __name__ == '__main__':
+    main()
