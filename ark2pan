@@ -14,11 +14,16 @@ ARCHITECTURE_LOOKUP = {
     'Itanium 64-bit' : 'ia64',
 }
 
+SPEED_MULTIPLIER_LOOKUP = {
+    'MHz' : 1,
+    'GHz' : 1000,
+}
+
 CPU_TEMPLATE = '''structure template hardware/cpu/intel/%(family)s_%(number)s;
 
 "manufacturer" = "Intel";
 "model" = "%(ident)s";
-"speed" = %(speed)s;
+"speed" = %(speed)s; # MHz
 "arch" = "%(arch)s";
 "cores" = %(Num_of_Cores)s;
 "chipset" = "%(codename)s"; # Intel codename
@@ -51,7 +56,8 @@ def main():
             except KeyError:
                 pass
 
-            cpu['speed'] = cpu['Processor_Base_Frequency'].replace(' ', '*')
+            speed = cpu['Processor_Base_Frequency'].split()
+            cpu['speed'] = int(float(speed[0]) * SPEED_MULTIPLIER_LOOKUP[speed[1]])
             cpu['ident'] = RE_DEBRACKET.sub('', cpu['Processor_Name'].replace('Processor', 'CPU'))
             cpu['ident'] += ' @ %(Processor_Base_Frequency)s' % cpu
             cpu['family'] = RE_DEBRACKET.sub('', cpu['ident'].split()[1]).replace('(R)', '').lower()
