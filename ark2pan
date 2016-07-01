@@ -37,6 +37,7 @@ RE_DEBRACKET = re.compile(r'\((?!R).*\).*$')
 def main():
     argparser = ArgumentParser(description='Generate Pan hardware templates for Intel CPUs from ARK')
     argparser.add_argument('filename', metavar='FILENAME', help='Path to downloaded ARK XML file')
+    argparser.add_argument('--debug', action='store_true', help='Print all parsed CPU data to stdout')
     args = argparser.parse_args()
 
     arkparser = ARKParser()
@@ -80,10 +81,11 @@ def main():
             with open('intel/%(family)s_%(number)s.pan' % cpu, 'w') as f:
                 f.write(CPU_TEMPLATE % cpu)
 
-            for k, v in cpu.iteritems():
-                if v:
-                    print ("%60s : %s") % (k, v)
-            print
+            if args.debug:
+                for k, v in cpu.iteritems():
+                    if v:
+                        print ("%60s : %s") % (k, v)
+                print
         else:
             print 'Skipped "%(Processor_Name)s" due to missing processor number' % cpu
 
