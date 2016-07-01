@@ -25,6 +25,7 @@ CPU_TEMPLATE = '''structure template hardware/cpu/intel/%(family)s_%(number)s;
 "speed" = %(speed)s; # MHz
 "arch" = "%(arch)s";
 "cores" = %(Num_of_Cores)s;
+"max_threads" = %(threads)s;
 "chipset" = "%(codename)s"; # Intel codename
 "power" = %(power)s; # TDP in watts
 '''
@@ -63,6 +64,10 @@ def main():
             cpu['number'] = cpu['Processor_Number'].replace(' ','').replace('-','_').upper().replace('V','v')
             cpu['codename'] = cpu['Code_Name'].lower()
             cpu['power'] = cpu['TDP'].split()[0]
+
+            cpu['threads'] = cpu['Num_of_Cores']
+            if cpu['Num_of_Threads']:
+                cpu['threads'] = cpu['Num_of_Threads']
 
             try:
                 makedirs('intel')
