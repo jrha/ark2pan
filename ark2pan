@@ -67,7 +67,7 @@ def main():
             cpu['power'] = cpu['TDP'].split()[0]
 
             cpu['threads'] = cpu['Num_of_Cores']
-            if cpu['Num_of_Threads']:
+            if 'Num_of_Threads' in cpu:
                 cpu['threads'] = cpu['Num_of_Threads']
 
             try:

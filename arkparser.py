@@ -23,7 +23,7 @@ class ARKParser():
             v = False
         return v
 
-    def parse(self, filename):
+    def parse(self, filename, preserve_empties=False):
         data_table = []
         max_row_width = 0
         with open(filename) as file_in:
@@ -55,5 +55,8 @@ class ARKParser():
 
             # Construct a dictionary from column names and tabular data
             data_table = [dict(zip(column_names, [self.vclean(v) for v in r])) for r in data_table]
+            if not preserve_empties:
+                # Remove items with empty values
+                data_table = [{k:v for k, v in r.items() if v} for r in data_table]
 
             return data_table
