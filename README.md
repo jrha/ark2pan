@@ -27,3 +27,14 @@ Example:
 ```
 ./ark2pan Intel_ARK_AdvancedSearch_2016_05_11.xml
 ```
+
+
+ark2aq
+------
+
+Uses `ARKParser` to generate `add_cpu` commands for aquilon, should be used with templates from `ark2pan`.
+
+Example:
+```
+./ark2aq Intel_ARK_AdvancedSearch_2016_05_11.xml
+```

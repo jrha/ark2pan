@@ -1,0 +1,42 @@
+#!/usr/bin/env python2
+# encoding: utf-8
+
+import re
+from argparse import ArgumentParser
+from arkparser import ARKParser
+
+SPEED_MULTIPLIER_LOOKUP = {
+    'MHz' : 1,
+    'GHz' : 1000,
+}
+
+CPU_TEMPLATE = 'aq.py add cpu --cpu %(family)s_%(number)s --vendor intel --speed %(speed)s --comments "%(ident)s"'
+
+RE_DEBRACKET = re.compile(r'\((?!R).*\).*$')
+
+
+def main():
+    argparser = ArgumentParser(description='Generate aq add_cpu commands for Intel CPUs from ARK')
+    argparser.add_argument('filename', metavar='FILENAME', help='Path to downloaded ARK XML file')
+    args = argparser.parse_args()
+
+    arkparser = ARKParser()
+    cpus = arkparser.parse(args.filename)
+
+    for cpu in cpus:
+        if 'Processor_Number' in cpu and cpu['Processor_Number']:
+            speed = cpu['Processor_Base_Frequency'].split()
+            speed[0] = float(speed[0])
+            cpu['speed'] = int(speed[0] * SPEED_MULTIPLIER_LOOKUP[speed[1]])
+            cpu['ident'] = RE_DEBRACKET.sub('', cpu['Processor_Name'].replace('Processor', 'CPU'))
+            cpu['ident'] += '@ %.2f %s' % tuple(speed)
+            cpu['family'] = RE_DEBRACKET.sub('', cpu['ident'].split()[1]).replace('(R)', '').lower()
+            cpu['number'] = cpu['Processor_Number'].replace(' ','').replace('-','_').lower()
+
+            print CPU_TEMPLATE % cpu
+        else:
+            print '# Skipped "%(Processor_Name)s" due to missing processor number' % cpu
+
+
+if __name__ == '__main__':
+    main()
