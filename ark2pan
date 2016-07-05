@@ -26,7 +26,7 @@ CPU_TEMPLATE = '''structure template hardware/cpu/intel/%(family)s_%(number)s;
 "arch" = "%(arch)s";
 "cores" = %(Num_of_Cores)s;
 "max_threads" = %(threads)s;
-"chipset" = "%(codename)s"; # Intel codename
+"type" = "%(codename)s"; # Intel codename
 "power" = %(power)s; # TDP in watts
 '''
 #"hyperthreading" = %(hyperthreading)s; # %(Num_of_Threads)s threads
@@ -58,11 +58,12 @@ def main():
                 pass
 
             speed = cpu['Processor_Base_Frequency'].split()
-            cpu['speed'] = int(float(speed[0]) * SPEED_MULTIPLIER_LOOKUP[speed[1]])
+            speed[0] = float(speed[0])
+            cpu['speed'] = int(speed[0] * SPEED_MULTIPLIER_LOOKUP[speed[1]])
             cpu['ident'] = RE_DEBRACKET.sub('', cpu['Processor_Name'].replace('Processor', 'CPU'))
-            cpu['ident'] += ' @ %(Processor_Base_Frequency)s' % cpu
+            cpu['ident'] += '@ %.2f %s' % tuple(speed)
             cpu['family'] = RE_DEBRACKET.sub('', cpu['ident'].split()[1]).replace('(R)', '').lower()
-            cpu['number'] = cpu['Processor_Number'].replace(' ','').replace('-','_').upper().replace('V','v')
+            cpu['number'] = cpu['Processor_Number'].replace(' ','').replace('-','_').lower()
             cpu['codename'] = cpu['Code_Name'].lower()
             cpu['power'] = cpu['TDP'].split()[0]
 
