@@ -24,19 +24,22 @@ def main():
     cpus = arkparser.parse(args.filename)
 
     for cpu in cpus:
-        if 'Processor_Number' in cpu and cpu['Processor_Number']:
+        try:
             speed = cpu['Processor_Base_Frequency'].split()
             speed[0] = float(speed[0])
             cpu['speed'] = int(speed[0] * SPEED_MULTIPLIER_LOOKUP[speed[1]])
             cpu['ident'] = RE_DEBRACKET.sub('', cpu['Processor_Name'].replace('Processor', 'CPU'))
             cpu['ident'] += '@ %.2f %s' % tuple(speed)
             cpu['family'] = RE_DEBRACKET.sub('', cpu['ident'].split()[1]).replace('(R)', '').lower()
+            modifier = RE_DEBRACKET.sub('', cpu['ident'].split()[2]).replace('(R)', '').lower()
             cpu['number'] = cpu['Processor_Number'].replace(' ','').replace('-','_').lower()
 
-            print CPU_TEMPLATE % cpu
-        else:
-            print '# Skipped "%(Processor_Name)s" due to missing processor number' % cpu
+            if modifier != 'cpu':
+                cpu['family'] = '%s_%s' % (cpu['family'], modifier)
 
+            print CPU_TEMPLATE % cpu
+        except KeyError as e:
+            print ('# Skipped "%(Processor_Name)s", missing ' % cpu) + e.args[0]
 
 if __name__ == '__main__':
     main()

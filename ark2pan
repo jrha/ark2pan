@@ -44,28 +44,44 @@ def main():
     cpus = arkparser.parse(args.filename)
 
     for cpu in cpus:
-        if 'Processor_Number' in cpu and cpu['Processor_Number']:
-            try:
-                cpu['arch'] = ARCHITECTURE_LOOKUP[cpu['Instruction_Set']]
-            except KeyError:
+        if 'Instruction_Set' in cpu:
+            cpu['arch'] = ARCHITECTURE_LOOKUP[cpu['Instruction_Set']]
+        else:
+            if args.debug:
+                print '# "%(Processor_Name)s", attempting to infer architecture from CPU features' % cpu
+            if 'Intel(R)_64' in cpu and cpu['Intel(R)_64'] == True:
+                cpu['arch'] = ARCHITECTURE_LOOKUP['64-bit']
+            elif 'Processor_Name' in cpu and 'Itanium' in cpu['Processor_Name']:
+                cpu['arch'] = ARCHITECTURE_LOOKUP['Itanium 64-bit']
+            else:
+                # Fatal, always report
+                print '# Skipped "%(Processor_Name)s", could not determine architecture' % cpu
                 continue
 
-            cpu['hyperthreading'] = False
+        cpu['hyperthreading'] = False
 
-            try:
-                cpu['hyperthreading'] = cpu['Intel(R)_HyperThreading_Technology']
-            except KeyError:
-                pass
+        try:
+            cpu['hyperthreading'] = cpu['Intel(R)_HyperThreading_Technology']
+        except KeyError as e:
+            # Not fatal, report in debug mode only
+            if args.debug:
+                print ('# Continuing, but "%(Processor_Name)s", missing ' % cpu) + e.args[0]
+            pass
 
+        try:
             speed = cpu['Processor_Base_Frequency'].split()
             speed[0] = float(speed[0])
             cpu['speed'] = int(speed[0] * SPEED_MULTIPLIER_LOOKUP[speed[1]])
             cpu['ident'] = RE_DEBRACKET.sub('', cpu['Processor_Name'].replace('Processor', 'CPU'))
             cpu['ident'] += '@ %.2f %s' % tuple(speed)
             cpu['family'] = RE_DEBRACKET.sub('', cpu['ident'].split()[1]).replace('(R)', '').lower()
+            modifier = RE_DEBRACKET.sub('', cpu['ident'].split()[2]).replace('(R)', '').lower()
             cpu['number'] = cpu['Processor_Number'].replace(' ','').replace('-','_').lower()
             cpu['codename'] = cpu['Code_Name'].lower()
             cpu['power'] = cpu['TDP'].split()[0]
+
+            if modifier != 'cpu':
+                cpu['family'] = '%s_%s' % (cpu['family'], modifier)
 
             cpu['threads'] = cpu['Num_of_Cores']
             if 'Num_of_Threads' in cpu:
@@ -79,16 +95,19 @@ def main():
                 else:
                     raise
 
-            with open('intel/%(family)s_%(number)s.pan' % cpu, 'w') as f:
+            template_filename = 'intel/%(family)s_%(number)s.pan' % cpu
+            with open(template_filename, 'w') as f:
                 f.write(CPU_TEMPLATE % cpu)
 
             if args.debug:
-                for k, v in cpu.iteritems():
-                    if v:
-                        print ("%60s : %s") % (k, v)
+                keys = cpu.keys()
+                keys.sort()
+                for k in keys:
+                    if cpu[k]:
+                        print ("%60s : %s") % (k, cpu[k])
                 print
-        else:
-            print 'Skipped "%(Processor_Name)s" due to missing processor number' % cpu
+        except KeyError as e:
+            print ('# Skipped "%(Processor_Name)s", missing ' % cpu) + e.args[0]
 
 
 if __name__ == '__main__':

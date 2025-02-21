@@ -27,23 +27,21 @@ class ARKParser():
         data_table = []
         max_row_width = 0
         with open(filename) as file_in:
-            workbook = ET.fromstring(file_in.read().strip())
-            for ws in workbook.findall('{urn:schemas-microsoft-com:office:spreadsheet}Worksheet'):
-                for table in ws.findall('{urn:schemas-microsoft-com:office:spreadsheet}Table'):
-                    for row in table.findall('{urn:schemas-microsoft-com:office:spreadsheet}Row'):
-                        input_row = []
-                        row_width = 0
-                        for cell in row.findall('{urn:schemas-microsoft-com:office:spreadsheet}Cell'):
-                            input_data = ''
-                            row_width += 1
-                            for data in cell.findall('{urn:schemas-microsoft-com:office:spreadsheet}Data'):
-                                input_data = self.uniclean(data.text)
-                            input_row.append(input_data)
-                        # Trailing cells are trimmed from each row
-                        # In order to flip the table, we need them back
-                        max_row_width = max(max_row_width, row_width)
-                        input_row += [''] * (max_row_width - len(input_row))
-                        data_table.append(input_row)
+            table = ET.fromstring(file_in.read().strip())
+            for row in table.findall('tr'):
+                input_row = []
+                row_width = 0
+                for cell in row.findall('td'):
+                    input_data = ''
+                    row_width += 1
+                    if cell.text:
+                        input_data = self.uniclean(cell.text)
+                    input_row.append(input_data)
+                # Trailing cells are trimmed from each row
+                # In order to flip the table, we need them back
+                max_row_width = max(max_row_width, row_width)
+                input_row += [''] * (max_row_width - len(input_row))
+                data_table.append(input_row)
 
             data_table = data_table[2:] # Drop first two rows
 
