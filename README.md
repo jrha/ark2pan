@@ -1,4 +1,4 @@
-# ark2pan
+# cpu2pan
 
 ## csv_tools
 
