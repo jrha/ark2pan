@@ -1,0 +1,48 @@
+#!/bin/bash
+
+urls="$(mktemp)"
+
+page="$(mktemp)"
+labels="$(mktemp)"
+data="$(mktemp)"
+
+output_dir="data/intel"
+mkdir -p "$output_dir"
+
+function pup_text {
+    selector="$1"
+    pup "$selector" 'text{}' -f "$page" | grep -E '\S' | sed 's/\s\+$//' | grep -vE '‡|†' | sed 's/^\|$/"/g'
+}
+
+function pup_json {
+    selector="$1"
+    # Deep foo here
+    pup "$selector" 'json{}' -f "$page" | jq '.[].children[].text | select( . != null )'
+}
+
+# Scrape URLs for all "Server" CPUs
+# N.B. CPUs can belong to more than one segment, Server & Embedded are a common combination
+curl -s https://www.intel.com/content/www/us/en/ark/products/series/595/intel-xeon-processors.html \
+    | pup "tr.seg-server a" 'json{}' \
+    | jq -r .[].href \
+    | sed 's#^/#https://www.intel.com/#' \
+    > "$urls"
+
+while read -r u; do
+    echo "$u"
+    curl -s "$u" > "$page"
+    sku="$(echo "$u" | grep -oE 'sku/[0-9]+' | cut -d / -f 2)"
+    output="data/intel/$sku.csv"
+
+    echo '"SKU"' > "$labels"
+    echo '"Processor_Name"' >> "$labels"
+    pup_json '.tech-label' >> "$labels"
+
+    echo "\"$sku\"" > "$data"
+    pup_text 'head > title' >> "$data"
+    pup_json '.tech-data' >> "$data"
+
+    paste -s "$labels" "$data" | sed 's/\t/,/g' > "$output"
+done < "$urls"
+
+rm -f "$urls" "$page" "$labels" "$data"

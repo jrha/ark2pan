@@ -1,5 +1,18 @@
 # ark2pan
 
+## csv_tools
+
+### csv2pan
+
+Parses specifications in CSV format obtained from the AMD and Intel websites and generates Pan templates in `./output/` for use with [Quattor](www.quattor.org).
+
+### scrape_amd
+
+Creates the `./data/amd/` working directory for AMD specifications and prints instructions for how to obtain the CSV file.
+
+### scrape_intel
+
+Scrapes the Intel specifications web pages and generates a CSV file per processor in `./data/intel/` in a similar fashion to the method used by JavaScript on each of the pages.
 
 ## ark_xml_tools
 

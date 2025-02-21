@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+# encoding: utf-8
+
+import csv
+import html
+from os import makedirs
+from errno import EEXIST
+from argparse import ArgumentParser
+from sys import stderr
+from itertools import cycle
+
+
+ARCHITECTURE_LOOKUP = {
+    '' : 'x86_64',
+    '32-bit' : 'i386',
+    '64-bit' : 'x86_64',
+    'x86_64' : 'x86_64',
+    'Itanium 64-bit' : 'ia64',
+    'epyc' : 'x86_64',
+    'opteron' : 'x86_64',
+}
+
+SPEED_MULTIPLIER_LOOKUP = {
+    'MHZ' : 1,
+    'GHZ' : 1000,
+}
+
+OPTERON_GENERATIONS = {
+    '1' : 'k10',
+    '2' : 'bulldozer',
+    '3' : 'piledriver',
+}
+
+
+CPU_TEMPLATE = '''structure template hardware/cpu/%(manufacturer_lower)s/%(family)s_%(number)s;
+%(comment)s
+"manufacturer" = "%(manufacturer)s";
+"model" = "%(ident)s";
+"speed" = %(speed)s; # MHz
+"arch" = "%(arch)s";
+"cores" = %(cores)s;
+"max_threads" = %(threads)s;
+"type" = "%(codename)s"; # %(manufacturer)s codename
+"power" = %(power)s; # TDP in watts
+'''
+
+
+def make_cpu(cpu, debug=False):
+    speed = False
+
+    if 'Processor Base Frequency' in cpu:
+        speed = cpu['Processor Base Frequency'].split()
+    elif 'Configurable TDP-up Base Frequency' in cpu:
+        speed = cpu['Configurable TDP-up Base Frequency'].split()
+    elif 'Base Clock' in cpu:
+        speed = cpu['Base Clock'].upper().split()
+
+    if speed:
+        speed[0] = float(speed[0])
+        cpu['speed'] = int(speed[0] * SPEED_MULTIPLIER_LOOKUP[speed[1].upper()])
+
+    if 'Processor_Number' in cpu:
+        cpu['number'] = cpu['Processor_Number'].replace(' ','').replace('-','_').lower()
+
+    cpu['comment'] = "\n"
+    if 'SKU' in cpu:
+        cpu['comment'] += f"# SKU: {cpu['SKU']}\n"
+    elif 'Product ID Tray' in cpu and cpu['Product ID Tray']:
+        cpu['comment'] += f"# Product ID: {cpu['Product ID Tray']}\n"
+
+    if 'Launch Date' in cpu and cpu['Launch Date']:
+        cpu['comment'] += f"# Launch Date: {html.unescape(cpu['Launch Date'])}\n"
+
+    name = 'unknown'
+    if 'Processor_Name' in cpu:
+        name = cpu['Processor_Name'].replace('®', '(R)')
+        if 'CPU' not in name:
+            name = name.replace('Processor', 'CPU')
+        else:
+            name = name.replace('Processor', '')
+
+        cpu['ident'] = name.strip()
+        if speed:
+            cpu['ident'] += ' @ %.2f%s' % (float(speed[0]), speed[1])
+
+        manufacturer, family, subclass = cpu['Processor_Name'].split('® ')
+        subclass = subclass.split()[0]
+
+        cpu['manufacturer'] = manufacturer
+        cpu['family'] = family.lower()
+
+        if subclass.lower() in ['bronze', 'silver', 'gold', 'platinum', 'max']:
+            cpu['family'] += '_' + subclass.lower()
+
+        cpu['number'] = cpu['Processor Number'].replace(' ','').replace('-','_').lower()
+
+    elif 'Name' in cpu:
+        manufacturer, family, number = cpu['Name'].split(' ', 2)
+
+        cpu['manufacturer'] = manufacturer
+        cpu['family'] = family.replace('™', '').lower()
+        cpu['number'] = number.replace(' ','').replace('-','_').lower()
+
+        cpu['name'] = f'{family}_{number}'
+        cpu['ident'] = cpu['Name'].replace('™', '')
+
+
+    if 'Instruction_Set' in cpu:
+        cpu['arch'] = ARCHITECTURE_LOOKUP[cpu['Instruction_Set']]
+    else:
+        if debug:
+            print(f'# "{name}", attempting to infer architecture from CPU features')
+        if 'Intel® 64' in cpu and cpu['Intel® 64'] == 'Yes':
+            cpu['arch'] = ARCHITECTURE_LOOKUP['64-bit']
+        elif 'Processor_Name' in cpu and 'Itanium' in cpu['Processor_Name']:
+            cpu['arch'] = ARCHITECTURE_LOOKUP['Itanium 64-bit']
+        elif cpu['family'] in ARCHITECTURE_LOOKUP:
+            cpu['arch'] = ARCHITECTURE_LOOKUP[cpu['family']]
+        else:
+            # Fatal, always report
+            print(f'Skipped "{name}", could not determine architecture')
+            return
+
+    if 'Code Name' in cpu:
+        cpu['codename'] = cpu['Code Name'].lower().replace('products formerly ', '')
+    elif 'Series' in cpu:
+        if 'EPYC' in cpu['Series']:
+            cpu['codename'] = 'zen' + cpu['Series'].lower().split(' ')[1][-1].replace('1', '')
+        elif 'Opteron' in cpu['Series']:
+            cpu['codename'] = OPTERON_GENERATIONS[cpu['Series'].split(' ')[1][1]]
+
+    if 'TDP' in cpu:
+        cpu['power'] = cpu['TDP'].split()[0]
+    elif 'Processor Base Power' in cpu:
+        cpu['power'] = cpu['Processor Base Power'].split()[0]
+    elif 'Default TDP' in cpu:
+        # Some CPUs list multiple TDP, we always want the highest
+        powers = [int(p) for p in cpu['Default TDP'].replace('W', '').split('/')]
+        cpu['power'] = max(powers)
+
+    cpu['manufacturer_lower'] = cpu['manufacturer'].lower()
+
+    if 'Num_of_Cores' in cpu:
+        cpu['cores'] = cpu['Num_of_Cores']
+    elif 'Total Cores' in cpu:
+        cpu['cores'] = cpu['Total Cores']
+    elif '# of CPU Cores' in cpu:
+        cpu['cores'] = cpu['# of CPU Cores']
+        cpu['ident'] += ' ' + cpu['# of CPU Cores'] + '-Core Processor'
+
+    cpu['threads'] = cpu['cores']
+    if 'Num_of_Threads' in cpu:
+        cpu['threads'] = cpu['Num_of_Threads']
+    elif 'Total Threads' in cpu:
+        cpu['threads'] = cpu['Total Threads']
+    elif '# of Threads' in cpu:
+        cpu['threads'] = cpu['# of Threads']
+
+    try:
+        makedirs('output/' + cpu['manufacturer_lower'])
+    except OSError as e:
+        if e.errno == EEXIST:
+            pass
+        else:
+            raise
+
+    template_filename = 'output/%(manufacturer_lower)s/%(family)s_%(number)s.pan' % cpu
+    with open(template_filename, 'w', encoding='utf-8') as f:
+        f.write(CPU_TEMPLATE % cpu)
+
+    if debug:
+        keys = cpu.keys()
+        for k in sorted(keys):
+            if cpu[k]:
+                print(f"{k:>60} : {cpu[k]}")
+        print()
+
+
+def main():
+    argparser = ArgumentParser(description='Generate Pan hardware templates for CPUs specifications in CSV format')
+    argparser.add_argument('filenames', metavar='FILENAME', nargs='+', help='Path to CSV file(s)')
+    argparser.add_argument('--debug', action='store_true', help='Print all parsed CPU data to stdout')
+    args = argparser.parse_args()
+
+    spinner = cycle('䷪䷡䷊䷒䷗䷁䷖䷓䷋䷠䷫䷀')
+
+    for f in args.filenames:
+        if args.debug:
+            print(f"Processing {f}")
+        with open(f, 'r', encoding='utf-8-sig') as csvfile:
+            cpureader = csv.reader(csvfile)
+            columns = next(cpureader)
+            for row in cpureader:
+                if len(columns) != len(row):
+                    print(f"WARNING: field length mismatch {len(columns)} != {len(row)}")
+                if args.debug:
+                    for i in range(0, max(len(columns), len(row))):
+                        k = v = '…'
+                        if i < len(columns):
+                            k = columns[i]
+                        if i < len(row):
+                            v = row[i]
+                        print(f"{k:>60} : {v}")
+                    print()
+
+                cpu = dict(zip(columns, row))
+                make_cpu(cpu, args.debug)
+
+                if not args.debug:
+                    stderr.write(next(spinner) + ' ')
+                    stderr.flush()
+                    stderr.write('\b'*2)
+    print()
+
+
+if __name__ == '__main__':
+    main()
