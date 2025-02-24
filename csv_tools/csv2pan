@@ -54,6 +54,8 @@ def make_cpu(cpu, debug=False):
         speed = cpu['Configurable TDP-up Base Frequency'].split()
     elif 'Base Clock' in cpu:
         speed = cpu['Base Clock'].upper().split()
+    elif 'CPU max MHz' in cpu:
+        speed = [cpu['CPU max MHz'], 'MHz']
 
     if speed:
         speed[0] = float(speed[0])
@@ -104,9 +106,19 @@ def make_cpu(cpu, debug=False):
         cpu['name'] = f'{family}_{number}'
         cpu['ident'] = cpu['Name'].replace('™', '')
 
+    elif 'processor-version' in cpu:
+        cpu['ident'] = cpu['processor-version']
+        ident_clean = cpu['processor-version'].replace('(R)', '').replace('(TM)', '').strip().split()
+        cpu['manufacturer'] = ident_clean[0]
+        cpu['family'] = ident_clean[1]
+        cpu['codename'] = ident_clean[1]
+        cpu['number'] = ident_clean[2]
+
 
     if 'Instruction_Set' in cpu:
         cpu['arch'] = ARCHITECTURE_LOOKUP[cpu['Instruction_Set']]
+    elif 'Architecture' in cpu:
+        cpu['arch'] = cpu['Architecture']
     else:
         if debug:
             print(f'# "{name}", attempting to infer architecture from CPU features')
@@ -114,7 +126,7 @@ def make_cpu(cpu, debug=False):
             cpu['arch'] = ARCHITECTURE_LOOKUP['64-bit']
         elif 'Processor_Name' in cpu and 'Itanium' in cpu['Processor_Name']:
             cpu['arch'] = ARCHITECTURE_LOOKUP['Itanium 64-bit']
-        elif cpu['family'] in ARCHITECTURE_LOOKUP:
+        elif 'family' in cpu and cpu['family'] in ARCHITECTURE_LOOKUP:
             cpu['arch'] = ARCHITECTURE_LOOKUP[cpu['family']]
         else:
             # Fatal, always report
@@ -147,6 +159,8 @@ def make_cpu(cpu, debug=False):
     elif '# of CPU Cores' in cpu:
         cpu['cores'] = cpu['# of CPU Cores']
         cpu['ident'] += ' ' + cpu['# of CPU Cores'] + '-Core Processor'
+    elif 'Core(s) per socket' in cpu:
+        cpu['cores'] = int(cpu['Core(s) per socket']) * int(cpu['Socket(s)'])
 
     cpu['threads'] = cpu['cores']
     if 'Num_of_Threads' in cpu:
@@ -155,6 +169,8 @@ def make_cpu(cpu, debug=False):
         cpu['threads'] = cpu['Total Threads']
     elif '# of Threads' in cpu:
         cpu['threads'] = cpu['# of Threads']
+    elif 'Threads(s) per core' in cpu:
+        cpu['cores'] = int(cpu['Threads(s) per core']) * cpu['cores']
 
     try:
         makedirs('output/' + cpu['manufacturer_lower'])
