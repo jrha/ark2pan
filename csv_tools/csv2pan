@@ -45,6 +45,9 @@ CPU_TEMPLATE = '''structure template hardware/cpu/%(manufacturer_lower)s/%(famil
 '''
 
 
+AQ_TEMPLATE = 'aq.py add cpu --cpu %(family)s_%(number)s --vendor intel --speed %(speed)s --comments "%(ident)s"\n'
+
+
 def make_cpu(cpu, debug=False):
     speed = False
 
@@ -180,9 +183,13 @@ def make_cpu(cpu, debug=False):
         else:
             raise
 
-    template_filename = 'output/%(manufacturer_lower)s/%(family)s_%(number)s.pan' % cpu
-    with open(template_filename, 'w', encoding='utf-8') as f:
+    pan_template_filename = 'output/%(manufacturer_lower)s/%(family)s_%(number)s.pan' % cpu
+    with open(pan_template_filename, 'w', encoding='utf-8') as f:
         f.write(CPU_TEMPLATE % cpu)
+
+    aq_template_filename = 'output/%(manufacturer_lower)s/aq_commands_%(family)s.sh' % cpu
+    with open(aq_template_filename, 'a', encoding='utf-8') as f:
+        f.write(AQ_TEMPLATE % cpu)
 
     if debug:
         keys = cpu.keys()
